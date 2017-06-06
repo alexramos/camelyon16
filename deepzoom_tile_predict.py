@@ -33,11 +33,17 @@ import shutil
 import sys
 from unicodedata import normalize
 
+import numpy as np
+from PIL import Image
+import cv2
 from keras.models import load_model
+import tensorflow as tf
 
 VIEWER_SLIDE_NAME = 'slide'
 
 MODEL = load_model('/home/ubuntu/notebooks/camelyon16/model.h5')
+MODEL._make_predict_function()
+graph = tf.get_default_graph()
 
 def predict_from_model(patch, model):
     """Predict which pixels are tumor.
@@ -80,14 +86,18 @@ class TileWorker(Process):
                 dz = self._get_dz(associated)
                 last_associated = associated
             tile = dz.get_tile(level, address)
+            out_tile = tile
 
+            #MODEL = load_model('/home/ubuntu/notebooks/camelyon16/model.h5')
             # predict here and overlay
-            X_i = np.array(tile)
-            pred_i = predict_from_model(X_i, MODEL)
-            overlay = np.uint8(cm.jet(pred_i)*255)[:,:,:3]
-            alpha = 0.5
-            out_tile = Image.fromarray(cv2.addWeighted(overlay,
-                alpha, X_i, 1-alpha, 0, X_i))
+            if level == dz.level_count-1:
+                X_i = np.array(tile)
+                with graph.as_default():
+                    pred_i = predict_from_model(X_i, MODEL)
+                overlay = np.uint8(cm.jet(pred_i)*255)[:,:,:3]
+                alpha = 0.5
+                out_tile = Image.fromarray(cv2.addWeighted(overlay,
+                    alpha, X_i, 1-alpha, 0, X_i))
 
             out_tile.save(outfile, quality=self._quality)
             self._queue.task_done()
